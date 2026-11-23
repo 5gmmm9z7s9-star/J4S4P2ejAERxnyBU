@@ -1,0 +1,159 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: deny everything by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Reusable security helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidVaultConfig(data, userId) {
+      return data.userId is string &&
+             data.userId == userId &&
+             data.userId == request.auth.uid &&
+             data.userId.size() >= 1 &&
+             data.userId.size() <= 128 &&
+             data.salt is string &&
+             data.salt.size() >= 16 &&
+             data.salt.size() <= 64 &&
+             data.verifierCiphertext is string &&
+             data.verifierCiphertext.size() >= 16 &&
+             data.verifierCiphertext.size() <= 512 &&
+             data.verifierIv is string &&
+             data.verifierIv.size() >= 12 &&
+             data.verifierIv.size() <= 64 &&
+             data.passwordHint is string &&
+             data.passwordHint.size() <= 100 &&
+             data.biometricEnabled is bool &&
+             data.autoLockSeconds is int &&
+             data.autoLockSeconds >= 0 &&
+             data.autoLockSeconds <= 3600;
+    }
+
+    function isValidVaultItem(data, userId) {
+      return data.userId is string &&
+             data.userId == userId &&
+             data.userId == request.auth.uid &&
+             data.userId.size() >= 1 &&
+             data.userId.size() <= 128 &&
+             data.category is string &&
+             data.category in ['LOGIN', 'CARD', 'SECURE_NOTE', 'IDENTITY'] &&
+             data.encryptedPayload is string &&
+             data.encryptedPayload.size() >= 16 &&
+             data.encryptedPayload.size() <= 16384 &&
+             data.iv is string &&
+             data.iv.size() >= 12 &&
+             data.iv.size() <= 64 &&
+             data.favorite is bool &&
+             data.strengthScore is int &&
+             data.strengthScore >= 0 &&
+             data.strengthScore <= 4;
+    }
+
+    // Master vault configuration: /users/{userId}/vault_config/master
+    match /users/{userId}/vault_config/{configId} {
+      allow get: if isOwner(userId) && isValidId(configId);
+      allow list: if isOwner(userId);
+
+      allow create: if isOwner(userId) &&
+                       configId == 'master' &&
+                       incoming().keys().hasAll([
+                         'userId', 'salt', 'verifierCiphertext', 'verifierIv',
+                         'passwordHint', 'biometricEnabled', 'autoLockSeconds',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'salt', 'verifierCiphertext', 'verifierIv',
+                         'passwordHint', 'biometricEnabled', 'autoLockSeconds',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().createdAt is timestamp &&
+                       incoming().createdAt <= request.time &&
+                       incoming().updatedAt is timestamp &&
+                       incoming().updatedAt <= request.time &&
+                       isValidVaultConfig(incoming(), userId);
+
+      allow update: if isOwner(userId) &&
+                       configId == 'master' &&
+                       isValidVaultConfig(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt is timestamp &&
+                       incoming().updatedAt <= request.time && (
+                         // Action: Update lock preferences or hint
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'biometricEnabled', 'autoLockSeconds', 'passwordHint', 'updatedAt'
+                         ]) ||
+                         // Action: Rotate master password (re-key canary & salt)
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'salt', 'verifierCiphertext', 'verifierIv', 'passwordHint', 'updatedAt'
+                         ])
+                       );
+
+      allow delete: if isOwner(userId) && configId == 'master';
+    }
+
+    // Encrypted vault items: /users/{userId}/vault_items/{itemId}
+    match /users/{userId}/vault_items/{itemId} {
+      allow get: if isOwner(userId) && isValidId(itemId);
+      allow list: if isOwner(userId);
+
+      allow create: if isOwner(userId) &&
+                       isValidId(itemId) &&
+                       incoming().keys().hasAll([
+                         'userId', 'category', 'encryptedPayload', 'iv',
+                         'favorite', 'strengthScore', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'category', 'encryptedPayload', 'iv',
+                         'favorite', 'strengthScore', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().createdAt is timestamp &&
+                       incoming().createdAt <= request.time &&
+                       incoming().updatedAt is timestamp &&
+                       incoming().updatedAt <= request.time &&
+                       isValidVaultItem(incoming(), userId);
+
+      allow update: if isOwner(userId) &&
+                       isValidId(itemId) &&
+                       isValidVaultItem(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt is timestamp &&
+                       incoming().updatedAt <= request.time && (
+                         // Action: Toggle favorite pin
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'favorite', 'updatedAt'
+                         ]) ||
+                         // Action: Edit encrypted item or re-encrypt during master password rotation
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'category', 'encryptedPayload', 'iv', 'favorite', 'strengthScore', 'updatedAt'
+                         ])
+                       );
+
+      allow delete: if isOwner(userId) && isValidId(itemId);
+    }
+  }
+}

@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">密盾</string>
+    <string name="app_subtitle">双重保险加密密码箱</string>
+    <string name="google_sign_in_cta">使用 Google 账号登录</string>
+    <string name="lock_vault_action">立即锁定</string>
+    <string name="biometric_prompt_title">密盾 · 第一道保险</string>
+    <string name="biometric_prompt_subtitle">请验证指纹或生物识别以继续</string>
+    <string name="biometric_prompt_negative">取消</string>
+    <string name="clipboard_sensitive_label">密盾机密内容</string>
+</resources>

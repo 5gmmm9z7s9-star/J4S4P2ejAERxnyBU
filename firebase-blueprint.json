@@ -1,0 +1,122 @@
+{
+  "entities": {
+    "VaultConfig": {
+      "title": "VaultConfig",
+      "description": "User's zero-knowledge master password salt, AES-GCM verification canary, and dual-lock security settings.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated Firebase UID of the vault owner."
+        },
+        "salt": {
+          "type": "string",
+          "description": "Base64-encoded 16-byte cryptographic salt for PBKDF2WithHmacSHA256."
+        },
+        "verifierCiphertext": {
+          "type": "string",
+          "description": "Base64-encoded AES-256-GCM encrypted verification token."
+        },
+        "verifierIv": {
+          "type": "string",
+          "description": "Base64-encoded 12-byte GCM IV for the verification token."
+        },
+        "passwordHint": {
+          "type": "string",
+          "description": "Optional non-secret password hint (empty string if omitted)."
+        },
+        "biometricEnabled": {
+          "type": "boolean",
+          "description": "Whether Layer 1 fingerprint/biometric verification is enabled."
+        },
+        "autoLockSeconds": {
+          "type": "integer",
+          "description": "Background auto-lock timeout in seconds (0 = immediate)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": [
+        "userId",
+        "salt",
+        "verifierCiphertext",
+        "verifierIv",
+        "passwordHint",
+        "biometricEnabled",
+        "autoLockSeconds",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "VaultItem": {
+      "title": "VaultItem",
+      "description": "Client-side AES-256-GCM encrypted credential, bank card, secure note, or identity document.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated Firebase UID of the item owner."
+        },
+        "category": {
+          "type": "string",
+          "enum": ["LOGIN", "CARD", "SECURE_NOTE", "IDENTITY"],
+          "description": "Vault item category."
+        },
+        "encryptedPayload": {
+          "type": "string",
+          "description": "Base64-encoded AES-256-GCM ciphertext of the JSON item fields."
+        },
+        "iv": {
+          "type": "string",
+          "description": "Base64-encoded 12-byte GCM IV for encryptedPayload."
+        },
+        "favorite": {
+          "type": "boolean",
+          "description": "Whether the item is pinned/starred."
+        },
+        "strengthScore": {
+          "type": "integer",
+          "description": "Password strength score from 0 to 4 (0 for non-password items)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": [
+        "userId",
+        "category",
+        "encryptedPayload",
+        "iv",
+        "favorite",
+        "strengthScore",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/vault_config/{configId}": {
+      "schema": { "$ref": "#/entities/VaultConfig" },
+      "description": "Master vault cryptographic metadata and lock preferences (single doc 'master' per user)."
+    },
+    "/users/{userId}/vault_items/{itemId}": {
+      "schema": { "$ref": "#/entities/VaultItem" },
+      "description": "Encrypted password, card, note, and identity records owned by the user."
+    }
+  }
+}
